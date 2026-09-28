@@ -17,6 +17,9 @@ from core.config import (
     GEMINI_API_KEY,
     GEMINI_BASE_URL,
     GEMINI_MODEL,
+    HF_BASE_URL,
+    HF_MODEL,
+    HF_TOKEN,
     LLM_MODEL,
     LLM_PROVIDER,
     LLM_TIMEOUT,
@@ -61,6 +64,19 @@ def provider_descriptor() -> dict[str, Any]:
     provider = (LLM_PROVIDER or "ollama").lower()
     if provider in {"openai-compatible", "openai_compatible", "chatgpt"}:
         provider = "openai"
+
+    if provider in {"huggingface", "hf"}:
+        provider = "huggingface"
+        model = LLM_MODEL or HF_MODEL
+        return {
+            "provider": provider,
+            "model": model,
+            "url": HF_BASE_URL,
+            "endpoint": HF_BASE_URL,
+            "mode": "cloud",
+            "api_key_configured": bool(HF_TOKEN),
+            "configured": bool(HF_TOKEN and model and HF_BASE_URL),
+        }
 
     if provider == "ollama":
         model = LLM_MODEL or OLLAMA_MODEL
@@ -162,6 +178,8 @@ def query_selector_model(context: list[dict[str, Any]], intent: str) -> dict[str
 
     if provider == "ollama":
         raw = _query_ollama(prompt, descriptor["model"])
+    elif provider == "huggingface":
+        raw = _query_huggingface(prompt, descriptor["model"])
     elif provider == "openai":
         raw = _query_openai(prompt, descriptor["model"])
     elif provider == "anthropic":
@@ -241,6 +259,24 @@ def _query_openai(prompt: str, model: str) -> str:
         _openai_chat_url(),
         payload,
         {"Authorization": f"Bearer {OPENAI_API_KEY}"},
+    )
+    return str(data["choices"][0]["message"]["content"]).strip()
+
+
+def _query_huggingface(prompt: str, model: str) -> str:
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": "Return only valid JSON."},
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": 0,
+        "response_format": {"type": "json_object"},
+    }
+    data = _post_json(
+        HF_BASE_URL,
+        payload,
+        {"Authorization": f"Bearer {HF_TOKEN}"},
     )
     return str(data["choices"][0]["message"]["content"]).strip()
 
