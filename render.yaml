@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: healbot-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: HEALBOT_ENV
+        value: production
+      - key: HEALBOT_LLM_PROVIDER
+        value: huggingface
+      - key: HEALBOT_WORKERS
+        value: "1"
+      - key: HEALBOT_MAX_QUEUED
+        value: "20"
+      - key: HEALBOT_JWT_SECRET
+        generateValue: true
+      - key: HF_TOKEN
+        sync: false
+      - key: HF_MODEL
+        sync: false
+      - key: HEALBOT_ALLOWED_ORIGINS
+        sync: false
+      - key: HEALBOT_DB_URL
+        sync: false
