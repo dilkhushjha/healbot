@@ -88,6 +88,11 @@ GEMINI_BASE_URL = os.environ.get(
     "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
 ).strip()
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "").strip()
+HF_TOKEN = os.environ.get("HF_TOKEN", "").strip()
+HF_BASE_URL = os.environ.get(
+    "HF_BASE_URL", "https://router.huggingface.co/v1/chat/completions"
+).strip()
+HF_MODEL = os.environ.get("HF_MODEL", "").strip()
 LLAVA_MODEL = os.environ.get("LLAVA_MODEL", "llava")
 LLM_TIMEOUT = int(os.environ.get("HEALBOT_LLM_TIMEOUT", 60))
 
