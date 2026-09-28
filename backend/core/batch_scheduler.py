@@ -203,6 +203,8 @@ def submit_batch(
     script_list: list,
     runner_fn:   Callable,
     submitted_by: str = "api",
+    environment_id: str | None = None,
+    environment_snapshot: dict | None = None,
 ) -> str:
     """
     Validate tier limits, create batch record, enqueue.
@@ -234,6 +236,8 @@ def submit_batch(
             id=batch_id,
             tenant_id=tenant_id,
             project_id=project_id,
+            environment_id=environment_id,
+            environment_snapshot=environment_snapshot or {},
             name=batch_name,
             status="queued",
             total_scripts=len(script_list),

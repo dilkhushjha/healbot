@@ -9,5 +9,7 @@
   "//input[@id='broken-zip']": "//*[@id='postal-code']",
   "//input[@id='broken-continue']": "//*[@id='continue']",
   "//*[contains(@class,'shopping_cart_badge')]": "//*[@id='add-to-cart-sauce-labs-backpack']",
-  "[data-test='error']": "//*[@id='user-name']"
+  "[data-test='error']": "//*[@id='user-name']",
+  "//*[contains(@class,'cart_item')]": "//*[@id='add-to-cart-sauce-labs-bike-light']",
+  "#password": "//*[@id='password']"
 }

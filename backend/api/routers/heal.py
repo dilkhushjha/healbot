@@ -3,8 +3,10 @@ heal.py — Inline selector healing endpoint.
 Called by healbot-sdk on every NoSuchElementException.
 """
 from healing.healing_engine import heal_selector
+from healing.llm_providers import provider_descriptor
 from core.logger import log as _log
 from core.database import engine, batches, heal_events, upsert_step, now
+from api.permissions import TEST_RUNNER_ROLES, require_role
 from sqlalchemy import update
 from pydantic import BaseModel
 from fastapi import APIRouter, Request
@@ -36,11 +38,14 @@ class HealResponse(BaseModel):
     strategy:  str | None
     dom_score: int
     llm_used:  bool
+    llm_provider: str | None = None
+    llm_model: str | None = None
     success:   bool
 
 
 @router.post("", response_model=HealResponse)
 def heal(req: HealRequest, request: Request):
+    require_role(request, TEST_RUNNER_ROLES)
     tenant = request.state.tenant
     tenant_id = tenant["id"]
 
@@ -74,6 +79,7 @@ def heal(req: HealRequest, request: Request):
         ctx=ctx,
     )
     success = result["healed"] is not None
+    llm_descriptor = provider_descriptor() if result["llm_invoked"] else {}
 
     if sess:
         run_id = sess["run_id"]
@@ -110,6 +116,8 @@ def heal(req: HealRequest, request: Request):
             "description":       req.test_name or req.selector[:50],
             "original_selector": req.selector,
             "healed_selector":   result["healed"],
+            "strategy":          result["strategy"],
+            "llm_used":          result["llm_invoked"],
             "reason":            "" if success else "All strategies exhausted",
             "vision_verdict":    result.get("vision_verdict", "unknown"),
             "vision_note":       result.get("vision_note", ""),
@@ -123,9 +131,6 @@ def heal(req: HealRequest, request: Request):
             sess["failed"] += 1
             ctx.increment("failures")
 
-        if result["llm_invoked"]:
-            ctx.increment("llmCalls")
-
         with engine.begin() as conn:
             conn.execute(update(batches).where(batches.c.id == batch_id).values(
                 healed=sess["healed"], failed=sess["failed"]
@@ -136,5 +141,7 @@ def heal(req: HealRequest, request: Request):
         strategy=result["strategy"],
         dom_score=result["dom_score"],
         llm_used=result["llm_invoked"],
+        llm_provider=llm_descriptor.get("provider"),
+        llm_model=llm_descriptor.get("model"),
         success=success,
     )

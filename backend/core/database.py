@@ -18,12 +18,13 @@ from datetime import datetime, timezone
 from sqlalchemy import (
     create_engine, MetaData, Table, Column,
     String, Integer, DateTime, Text, Boolean, Float, JSON,
-    select, update, func
+    select, update, func, text
 )
 from core.config import DB_URL
 
 os.makedirs("./data", exist_ok=True)
-engine = create_engine(DB_URL, connect_args={"check_same_thread": False})
+connect_args = {"check_same_thread": False} if DB_URL.startswith("sqlite") else {}
+engine = create_engine(DB_URL, connect_args=connect_args)
 metadata = MetaData()
 
 # ── Tenants ───────────────────────────────────────────────────────────────────
@@ -47,6 +48,49 @@ api_keys = Table("api_keys", metadata,
                  Column("is_active",    Boolean, default=True),
                  )
 
+tenant_users = Table("tenant_users", metadata,
+                     Column("id",         String, primary_key=True),
+                     Column("tenant_id",  String, nullable=False),
+                     Column("email",      String, nullable=False),
+                     Column("name",       String, nullable=False),
+                     Column("role",       String, nullable=False, default="viewer"),
+                     Column("status",     String, nullable=False, default="invited"),
+                     Column("created_at", DateTime),
+                     Column("updated_at", DateTime, nullable=True),
+                     Column("is_active",  Boolean, default=True),
+                     )
+
+audit_events = Table("audit_events", metadata,
+                     Column("id",         String, primary_key=True),
+                     Column("tenant_id",  String, nullable=False),
+                     Column("actor",      String, nullable=True),
+                     Column("action",     String, nullable=False),
+                     Column("target",     String, nullable=True),
+                     Column("details",    JSON, nullable=True),
+                     Column("created_at", DateTime),
+                     )
+
+runner_capabilities = Table("runner_capabilities", metadata,
+                            Column("id",              String, primary_key=True),
+                            Column("tenant_id",       String, nullable=False),
+                            Column("name",            String, nullable=False),
+                            Column("provider",        String, nullable=False, default="local"),
+                            Column("framework",       String, nullable=False, default="selenium"),
+                            Column("browser",         String, nullable=False, default="chrome"),
+                            Column("browser_version", String, nullable=True),
+                            Column("platform",        String, nullable=False, default="web"),
+                            Column("os",              String, nullable=True),
+                            Column("device",          String, nullable=True),
+                            Column("viewport",        String, nullable=True),
+                            Column("region",          String, nullable=True),
+                            Column("concurrency",     Integer, default=1),
+                            Column("status",          String, nullable=False, default="available"),
+                            Column("tags",            JSON, nullable=True),
+                            Column("created_at",      DateTime),
+                            Column("updated_at",      DateTime, nullable=True),
+                            Column("is_active",       Boolean, default=True),
+                            )
+
 # ── Projects ──────────────────────────────────────────────────────────────────
 projects = Table("projects", metadata,
                  Column("id",           String,  primary_key=True),
@@ -56,11 +100,29 @@ projects = Table("projects", metadata,
                  Column("created_at",   DateTime),
                  )
 
+environments = Table("environments", metadata,
+                     Column("id",          String, primary_key=True),
+                     Column("tenant_id",   String, nullable=False),
+                     Column("project_id",  String, nullable=False),
+                     Column("name",        String, nullable=False),
+                     Column("base_url",    Text, nullable=True),
+                     Column("framework",   String, nullable=False, default="playwright"),
+                     Column("browser",     String, nullable=False, default="chromium"),
+                     Column("platform",    String, nullable=False, default="web"),
+                     Column("runner_capability_id", String, nullable=True),
+                     Column("variables",   JSON, nullable=True),
+                     Column("created_at",  DateTime),
+                     Column("updated_at",  DateTime, nullable=True),
+                     Column("is_active",   Boolean, default=True),
+                     )
+
 # ── Batches ───────────────────────────────────────────────────────────────────
 batches = Table("batches", metadata,
                 Column("id",              String,  primary_key=True),
                 Column("tenant_id",       String,  nullable=False),
                 Column("project_id",      String,  nullable=True),
+                Column("environment_id",  String,  nullable=True),
+                Column("environment_snapshot", JSON, nullable=True),
                 Column("name",            String,  nullable=False),
                 Column("status",          String,
                        nullable=False, default="queued"),
@@ -167,10 +229,62 @@ usage_log = Table("usage_log", metadata,
 metadata.create_all(engine)
 
 
+def _ensure_local_schema():
+    """Add lightweight SQLite columns for existing local installations."""
+    if engine.dialect.name != "sqlite":
+        return
+    with engine.connect() as conn:
+        batch_columns = {
+            row[1] for row in conn.execute(text("PRAGMA table_info(batches)")).fetchall()
+        }
+        environment_columns = {
+            row[1] for row in conn.execute(text("PRAGMA table_info(environments)")).fetchall()
+        }
+    batch_additions = {
+        "environment_id": "ALTER TABLE batches ADD COLUMN environment_id VARCHAR",
+        "environment_snapshot": "ALTER TABLE batches ADD COLUMN environment_snapshot JSON",
+    }
+    environment_additions = {
+        "runner_capability_id": "ALTER TABLE environments ADD COLUMN runner_capability_id VARCHAR",
+    }
+    with engine.begin() as conn:
+        for name, statement in batch_additions.items():
+            if name not in batch_columns:
+                conn.execute(text(statement))
+        for name, statement in environment_additions.items():
+            if name not in environment_columns:
+                conn.execute(text(statement))
+
+
+_ensure_local_schema()
+
+
 # ── Query helpers ─────────────────────────────────────────────────────────────
 
 def now():
     return datetime.now(timezone.utc)
+
+
+def actor_for_tenant(tenant: dict) -> dict:
+    with engine.connect() as conn:
+        user = conn.execute(
+            select(tenant_users).where(
+                tenant_users.c.tenant_id == tenant["id"],
+                tenant_users.c.email == tenant["email"],
+                tenant_users.c.is_active == True,
+            )
+        ).mappings().first()
+    if user:
+        return dict(user)
+    return {
+        "id": "",
+        "tenant_id": tenant["id"],
+        "email": tenant["email"],
+        "name": tenant["name"],
+        "role": "owner",
+        "status": "active",
+        "is_active": True,
+    }
 
 
 def upsert_step(run_id: str, step_id: str, tenant_id: str, **kwargs):
@@ -187,7 +301,7 @@ def upsert_step(run_id: str, step_id: str, tenant_id: str, **kwargs):
 
 
 def get_tenant_by_key(api_key: str) -> dict | None:
-    with engine.connect() as conn:
+    with engine.begin() as conn:
         key_row = conn.execute(
             select(api_keys).where(api_keys.c.key ==
                                    api_key, api_keys.c.is_active == True)
@@ -204,6 +318,18 @@ def get_tenant_by_key(api_key: str) -> dict | None:
         conn.execute(update(api_keys).where(
             api_keys.c.key == api_key).values(last_used_at=now()))
         return dict(tenant_row)
+
+
+def get_auth_context_by_key(api_key: str) -> dict | None:
+    tenant = get_tenant_by_key(api_key)
+    if not tenant:
+        return None
+    actor = actor_for_tenant(tenant)
+    return {
+        "tenant": tenant,
+        "user": actor,
+        "role": actor.get("role", "viewer"),
+    }
 
 
 def get_daily_usage(tenant_id: str, date_str: str) -> int:

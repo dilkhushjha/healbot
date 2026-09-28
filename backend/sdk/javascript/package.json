@@ -1,0 +1,26 @@
+{
+  "name": "@healbot/playwright",
+  "version": "0.1.0",
+  "description": "Plug-and-play Healbot SDK for Playwright JavaScript frameworks.",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./reporter": "./reporter.js"
+  },
+  "files": [
+    "index.js",
+    "reporter.js",
+    "lib",
+    "README.md"
+  ],
+  "keywords": [
+    "healbot",
+    "playwright",
+    "self-healing",
+    "qa-automation"
+  ],
+  "peerDependencies": {
+    "@playwright/test": ">=1.40.0"
+  },
+  "license": "UNLICENSED"
+}

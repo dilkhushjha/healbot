@@ -57,10 +57,18 @@ def run_journey(run_id: str, journey_def: dict, ctx, tenant_id: str = "default")
     steps = journey_def["steps"]
     client_id = journey_def.get("client_id") or tenant_id
     journey_name = journey_def.get("name", "unnamed")
+    environment = journey_def.get("environment") or {}
+    capability = environment.get("runner_capability")
 
     log("JOURNEY",
         f"[{run_id}] '{journey_name}' — {len(steps)} steps", ctx=ctx)
-    driver = get_driver(ctx=ctx)
+    if environment:
+        log(
+            "JOURNEY",
+            f"[{run_id}] target={environment.get('project_name', '')}/{environment.get('name', '')} runner={capability.get('name') if capability else 'default'}",
+            ctx=ctx,
+        )
+    driver = get_driver(ctx=ctx, capability=capability)
     success = True
 
     try:

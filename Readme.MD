@@ -27,7 +27,8 @@ healbot_saas/
 │   │   ├── dom_healer.py            Keyword confidence scorer
 │   │   ├── intent_engine.py         3-tier intent: step > client map > built-in
 │   │   ├── learning_engine.py       Per-tenant + global cross-run memory
-│   │   ├── llm_reasoner.py          Ollama llama3
+│   │   ├── llm_reasoner.py          Provider-neutral LLM facade
+│   │   ├── llm_providers.py         Ollama/OpenAI/Anthropic/Gemini adapters
 │   │   ├── vision_analyzer.py       Ollama llava visual confirmation
 │   │   └── vision_capture.py        Screenshots → artifacts/<run_id>/
 │   │
@@ -184,8 +185,16 @@ This means repeated selector failures get cheaper and faster over time.
 | `HEALBOT_WORKERS` | `8` | Concurrent batch workers |
 | `HEALBOT_MAX_QUEUED` | `200` | Max queued batches before 429 |
 | `HEALBOT_CONFIDENCE` | `3` | DOM confidence threshold |
+| `HEALBOT_LLM_PROVIDER` | `ollama` | Selector-healing LLM provider: `ollama`, `openai`, `openai-compatible`, `anthropic`, `gemini` |
+| `HEALBOT_LLM_MODEL` | blank | Optional provider-agnostic model override |
 | `OLLAMA_URL` | `http://localhost:11434/api/generate` | Ollama endpoint |
-| `OLLAMA_MODEL` | `llama3` | Text LLM |
+| `OLLAMA_MODEL` | `llama3` | Local text LLM when using Ollama |
+| `OPENAI_API_KEY` | blank | Required when `HEALBOT_LLM_PROVIDER=openai` |
+| `OPENAI_MODEL` | blank | OpenAI chat model |
+| `ANTHROPIC_API_KEY` | blank | Required when `HEALBOT_LLM_PROVIDER=anthropic` |
+| `ANTHROPIC_MODEL` | blank | Anthropic messages model |
+| `GEMINI_API_KEY` | blank | Required when `HEALBOT_LLM_PROVIDER=gemini` |
+| `GEMINI_MODEL` | blank | Gemini generateContent model |
 | `LLAVA_MODEL` | `llava` | Vision LLM |
 | `HEALBOT_MEMORY` | `./memory` | Memory file directory |
 | `HEALBOT_ARTIFACTS` | `./artifacts` | Screenshot directory |

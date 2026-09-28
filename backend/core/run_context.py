@@ -12,10 +12,15 @@ class RunContext:
         self._metrics = {"llmCalls": 0, "visionCalls": 0,
                          "healedSelectors": 0, "failures": 0}
         self._status = "queued"
+        self._latest_screenshot = ""
+        self._latest_frame_at = ""
 
     def push(self, entry: dict):
         entry.setdefault("time", datetime.now().strftime("%H:%M:%S"))
         with self._lock:
+            if entry.get("screenshot"):
+                self._latest_screenshot = entry["screenshot"]
+                self._latest_frame_at = entry["time"]
             self._logs.append(entry)
 
     def get_logs(self, since: int = 0) -> list:
@@ -42,6 +47,18 @@ class RunContext:
     def get_status(self) -> str:
         with self._lock:
             return self._status
+
+    def get_snapshot(self) -> dict:
+        with self._lock:
+            return {
+                "metrics": dict(self._metrics),
+                "status": self._status,
+                "run_id": self.run_id,
+                "script_name": self.script_name,
+                "log_count": len(self._logs),
+                "latest_screenshot": self._latest_screenshot,
+                "latest_frame_at": self._latest_frame_at,
+            }
 
 
 _registry: dict = {}

@@ -75,5 +75,6 @@ def normalise(journey: dict) -> dict:
     return {
         "name":      journey["name"],
         "client_id": journey.get("client_id"),
+        "base_url":  base,
         "steps":     steps,
     }

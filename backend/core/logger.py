@@ -1,4 +1,5 @@
 from datetime import datetime
+import sys
 
 
 def log(stage: str, message: str, level: str = "info", ctx=None):
@@ -8,7 +9,9 @@ def log(stage: str, message: str, level: str = "info", ctx=None):
     so the dashboard SSE stream picks it up.
     """
     time_str = datetime.now().strftime("%H:%M:%S")
-    print(f"[{time_str}] [{stage}] {message}", flush=True)
+    line = f"[{time_str}] [{stage}] {message}"
+    encoding = sys.stdout.encoding or "utf-8"
+    print(line.encode(encoding, errors="replace").decode(encoding), flush=True)
 
     if ctx is not None:
         ctx.push({

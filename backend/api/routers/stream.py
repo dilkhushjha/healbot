@@ -4,6 +4,7 @@ GET /stream/{run_id}       live logs + metrics per script run
 GET /stream/batch/{id}     batch-level progress counter
 """
 from core.database import engine, batches, script_runs
+from core.live_frames import get_latest_frame
 from core import run_context
 from sqlalchemy import select
 from fastapi.responses import StreamingResponse
@@ -37,6 +38,9 @@ def stream_run(run_id: str):
             raise HTTPException(404, f"Run {run_id} not found")
 
         def _done():
+            latest = get_latest_frame(run_id)
+            if latest:
+                yield f"data: {json.dumps({'type':'snapshot','payload':{'metrics':{'llmCalls':row['llm_calls'],'visionCalls':row['vision_calls'],'healedSelectors':row['healed_steps'],'failures':row['failed_steps']},'status':row['status'],'run_id':run_id,'script_name':row['script_name'],'log_count':0,**latest}})}\n\n"
             yield f"data: {json.dumps({'type':'done','payload':{'status':row['status'],'run_id':run_id}})}\n\n"
         return StreamingResponse(_done(), media_type="text/event-stream",
                                  headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
@@ -47,7 +51,7 @@ def stream_run(run_id: str):
             for entry in ctx.get_logs(since=sent):
                 yield f"data: {json.dumps({'type':'log','payload':entry})}\n\n"
                 sent += 1
-            yield f"data: {json.dumps({'type':'snapshot','payload':{'metrics':ctx.get_metrics(),'status':ctx.get_status(),'run_id':run_id}})}\n\n"
+            yield f"data: {json.dumps({'type':'snapshot','payload':ctx.get_snapshot()})}\n\n"
             if ctx.get_status() in ("passed", "failed", "healed", "error"):
                 yield f"data: {json.dumps({'type':'done','payload':{'status':ctx.get_status(),'run_id':run_id}})}\n\n"
                 break

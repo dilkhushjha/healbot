@@ -36,7 +36,7 @@ _INTENT_MAP = {
 }
 
 _WEIGHTS = {
-    "id": 3, "name": 3, "data_testid": 3,
+    "id": 3, "name": 3, "data_test": 3, "data_testid": 3,
     "aria_label": 2, "placeholder": 2,
     "text": 1, "class": 1,
 }

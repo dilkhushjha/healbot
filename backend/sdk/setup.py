@@ -22,7 +22,9 @@ setup(
         "playwright": ["playwright>=1.40.0"],
         "robot":      ["robotframework>=6.0", "robotframework-seleniumlibrary>=6.0"],
     },
-    # NOTE: pytest11 entry_point intentionally removed.
-    # The plugin is loaded manually via conftest.py to avoid
-    # entry_point path resolution issues on Windows with editable installs.
+    entry_points={
+        "console_scripts": [
+            "healbot=healbot.__main__:main",
+        ],
+    },
 )

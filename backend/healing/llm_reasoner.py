@@ -1,79 +1,86 @@
-"""
-Ollama LLM backend for selector healing.
-Requires: ollama pull llama3
-Override: OLLAMA_URL, OLLAMA_MODEL env vars
-"""
-
+"""Stable LLM facade used by the healing engine."""
 import json
-import os
-import urllib.request
 import urllib.error
-from core.logger import log
 
-OLLAMA_URL = os.environ.get(
-    "OLLAMA_URL",   "http://localhost:11434/api/generate")
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3")
-TIMEOUT = 60
+from core.logger import log
+from healing.llm_providers import LLMProviderError, provider_descriptor, query_selector_model
 
 
 def ask_llm_for_element(context: list, intent: str, ctx=None) -> dict | None:
-    """
-    Ask Ollama to identify the correct element for the given intent.
-    Returns dict with id/name/data_testid/reason, or None on failure.
-    """
-    log("LLM", f"Querying Ollama ({OLLAMA_MODEL}) — intent: {intent}", ctx=ctx)
+    """Ask the configured LLM provider to identify the best replacement element."""
+    descriptor = provider_descriptor()
+    provider = descriptor["provider"]
+    model = descriptor["model"] or "no model"
+    if ctx:
+        ctx.push({
+            "type": "llm_activity",
+            "phase": "llm_invoked",
+            "status": "running",
+            "provider": provider,
+            "model": model,
+            "intent": intent,
+            "element_count": len(context),
+            "message": f"LLM invoked: {provider}/{model}",
+        })
+    log(
+        "LLM",
+        f"LLM USED: provider={provider}, model={model}, intent={intent}, elements={len(context)}",
+        ctx=ctx,
+    )
     if ctx:
         ctx.increment("llmCalls")
 
-    slim = [
-        {k: el[k] for k in
-         ("id", "name", "placeholder", "tag", "text", "aria_label", "data_testid")
-         if el.get(k)}
-        for el in context
-    ]
-
-    prompt = f"""You are a web automation expert. A Selenium selector is broken. Find the correct element.
-
-Intent: {intent}
-
-Page elements (JSON):
-{json.dumps(slim, indent=2)}
-
-Reply ONLY with a JSON object — no markdown, no code fences, nothing else:
-{{
-  "id": "<element id or null>",
-  "name": "<element name or null>",
-  "data_testid": "<data-testid or null>",
-  "reason": "<one sentence why>"
-}}"""
-
-    payload = json.dumps({
-        "model":  OLLAMA_MODEL,
-        "prompt": prompt,
-        "stream": False,
-        "format": "json",
-    }).encode()
-
-    req = urllib.request.Request(
-        OLLAMA_URL, data=payload,
-        headers={"Content-Type": "application/json"}, method="POST"
-    )
-    raw = ""
     try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
-            raw = json.loads(resp.read()).get("response", "").strip()
-
-        if raw.startswith("```"):
-            raw = raw.split("```")[1].lstrip("json").strip()
-
-        parsed = json.loads(raw)
-        log("LLM",
-            f"✅ id={parsed.get('id')} — {parsed.get('reason','')}", ctx=ctx)
+        parsed = query_selector_model(context, intent)
+        log(
+            "LLM",
+            f"LLM RESULT: provider={provider}, selected_id={parsed.get('id')}, reason={parsed.get('reason', '')}",
+            ctx=ctx,
+        )
+        if ctx:
+            ctx.push({
+                "type": "llm_activity",
+                "phase": "llm_result",
+                "status": "completed",
+                "provider": provider,
+                "model": model,
+                "selected_id": parsed.get("id"),
+                "reason": parsed.get("reason", ""),
+                "message": "LLM returned a selector candidate",
+            })
         return parsed
-
-    except urllib.error.URLError as e:
-        log("LLM", f"Ollama unreachable: {e.reason}", level="error", ctx=ctx)
-    except (json.JSONDecodeError, KeyError) as e:
-        log("LLM",
-            f"Parse error: {e} | raw: {raw[:200]}", level="error", ctx=ctx)
+    except LLMProviderError as exc:
+        log("LLM", str(exc), level="error", ctx=ctx)
+        if ctx:
+            ctx.push({
+                "type": "llm_activity",
+                "phase": "llm_error",
+                "status": "error",
+                "provider": provider,
+                "model": model,
+                "message": str(exc),
+            })
+    except urllib.error.URLError as exc:
+        reason = getattr(exc, "reason", exc)
+        log("LLM", f"{provider} unreachable: {reason}", level="error", ctx=ctx)
+        if ctx:
+            ctx.push({
+                "type": "llm_activity",
+                "phase": "llm_error",
+                "status": "error",
+                "provider": provider,
+                "model": model,
+                "message": f"{provider} unreachable: {reason}",
+            })
+    except (json.JSONDecodeError, KeyError, IndexError, TypeError) as exc:
+        log("LLM", f"Provider response parse error: {exc}", level="error", ctx=ctx)
+        if ctx:
+            ctx.push({
+                "type": "llm_activity",
+                "phase": "llm_error",
+                "status": "error",
+                "provider": provider,
+                "model": model,
+                "message": f"Provider response parse error: {exc}",
+            })
     return None

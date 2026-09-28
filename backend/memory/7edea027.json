@@ -1,0 +1,3 @@
+{
+  "//*[contains(@class,'cart_item')]": "//*[@id='add-to-cart-sauce-labs-bike-light']"
+}

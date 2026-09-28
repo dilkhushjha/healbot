@@ -9,9 +9,10 @@ Accepts the key two ways:
 Public routes: /health, /docs, /openapi.json, /auth/register
 OPTIONS preflight always passes through (required for CORS to work).
 """
-from core.database import get_tenant_by_key
+from core.database import get_auth_context_by_key
 from starlette.middleware.base import BaseHTTPMiddleware
-from fastapi import Request, HTTPException
+from fastapi import Request
+from fastapi.responses import JSONResponse
 import sys
 import os
 
@@ -23,7 +24,7 @@ if _BACKEND_DIR not in sys.path:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-PUBLIC_PATHS = {"/health", "/docs", "/openapi.json", "/redoc",
+PUBLIC_PATHS = {"/health", "/meta", "/docs", "/openapi.json", "/redoc",
                 "/auth/register", "/auth/login"}
 
 
@@ -48,16 +49,24 @@ class AuthMiddleware(BaseHTTPMiddleware):
             api_key = request.query_params.get("api_key", "").strip()
 
         if not api_key:
-            raise HTTPException(
-                401,
-                "Missing API key. "
-                "Send header: Authorization: Bearer hb_live_... "
-                "or query param: ?api_key=hb_live_..."
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "detail": (
+                        "Missing API key. Send header: Authorization: Bearer hb_live_... "
+                        "or query param: ?api_key=hb_live_..."
+                    )
+                },
             )
 
-        tenant = get_tenant_by_key(api_key)
-        if not tenant:
-            raise HTTPException(401, "Invalid or inactive API key")
+        auth_context = get_auth_context_by_key(api_key)
+        if not auth_context:
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Invalid or inactive API key"},
+            )
 
-        request.state.tenant = tenant
+        request.state.tenant = auth_context["tenant"]
+        request.state.user = auth_context["user"]
+        request.state.role = auth_context["role"]
         return await call_next(request)

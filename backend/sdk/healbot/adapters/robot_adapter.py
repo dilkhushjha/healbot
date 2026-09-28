@@ -63,10 +63,7 @@ class HealBotListener:
 
     def __init__(self):
         from healbot.client import HealBot
-        self._hb = HealBot(
-            api_key=os.environ.get("HEALBOT_API_KEY", ""),
-            url=os.environ.get("HEALBOT_URL", "http://localhost:8000"),
-        )
+        self._hb = HealBot()
         self._adapter = RobotAdapter(self._hb)
 
     def start_suite(self, data, result):
@@ -97,10 +94,7 @@ class HealBotLibrary:
 
     def __init__(self):
         from healbot.client import HealBot
-        self._hb = HealBot(
-            api_key=os.environ.get("HEALBOT_API_KEY", ""),
-            url=os.environ.get("HEALBOT_URL", "http://localhost:8000"),
-        )
+        self._hb = HealBot()
 
     def start_heal_session(self, name="Robot Run"):
         return self._hb.start_session(name=name, framework="robot")

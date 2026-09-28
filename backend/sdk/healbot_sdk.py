@@ -26,13 +26,24 @@ import urllib.request
 import urllib.error
 from typing import Optional
 
+try:
+    from healbot.config import resolve_api_key, resolve_api_url
+except Exception:
+    resolve_api_key = lambda explicit="": explicit
+    resolve_api_url = lambda explicit="": explicit or "http://localhost:8000"
+
 
 class HealBotClient:
-    def __init__(self, api_key: str, base_url: str = "http://localhost:8000"):
-        self.api_key = api_key
-        self.base_url = base_url.rstrip("/")
+    def __init__(self, api_key: str = "", base_url: str = "http://localhost:8000"):
+        self.api_key = resolve_api_key(api_key)
+        self.base_url = resolve_api_url("" if base_url == "http://localhost:8000" else base_url)
+        if not self.api_key:
+            raise ValueError(
+                "No Healbot API key found. Connect in the dashboard, run "
+                "`python -m healbot configure`, set HEALBOT_API_KEY, or pass api_key."
+            )
         self._headers = {
-            "Authorization": f"Bearer {api_key}",
+            "Authorization": f"Bearer {self.api_key}",
             "Content-Type":  "application/json",
         }
 
@@ -53,17 +64,23 @@ class HealBotClient:
         name:       str,
         scripts:    list,
         project_id: Optional[str] = None,
+        environment_id: Optional[str] = None,
     ) -> "Batch":
         """Submit a list of journey dicts as a batch."""
         payload = {"name": name, "scripts": scripts}
         if project_id:
             payload["project_id"] = project_id
+        if environment_id:
+            payload["environment_id"] = environment_id
         resp = self._request("POST", "/batches", payload)
         return Batch(resp["batch_id"], self)
 
     # ── Direct queries ────────────────────────────────────────────────────────
     def list_batches(self, limit: int = 20) -> list:
         return self._request("GET", f"/batches?limit={limit}")
+
+    def list_projects(self) -> list:
+        return self._request("GET", "/projects")
 
     def get_batch(self, batch_id: str) -> dict:
         return self._request("GET", f"/batches/{batch_id}")

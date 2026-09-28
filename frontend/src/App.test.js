@@ -1,8 +1,8 @@
 import { render, screen } from '@testing-library/react';
 import App from './App';
 
-test('renders learn react link', () => {
+test('renders the Healbot dashboard entry screen', () => {
   render(<App />);
-  const linkElement = screen.getByText(/learn react/i);
-  expect(linkElement).toBeInTheDocument();
+  expect(screen.getByText(/HealBot/i)).toBeInTheDocument();
+  expect(screen.getByText(/Create your account/i)).toBeInTheDocument();
 });
