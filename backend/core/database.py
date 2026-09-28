@@ -22,9 +22,14 @@ from sqlalchemy import (
 )
 from core.config import DB_URL
 
-os.makedirs("./data", exist_ok=True)
+# SQLite is useful for local development; hosted deployments should set a
+# persistent PostgreSQL URL via HEALBOT_DB_URL.
 connect_args = {"check_same_thread": False} if DB_URL.startswith("sqlite") else {}
-engine = create_engine(DB_URL, connect_args=connect_args)
+if DB_URL.startswith("sqlite:///"):
+    sqlite_path = DB_URL.removeprefix("sqlite:///").split("?", 1)[0]
+    if sqlite_path and sqlite_path != ":memory:" and not sqlite_path.startswith("/"):
+        os.makedirs(os.path.dirname(sqlite_path) or ".", exist_ok=True)
+engine = create_engine(DB_URL, connect_args=connect_args, pool_pre_ping=True)
 metadata = MetaData()
 
 # ── Tenants ───────────────────────────────────────────────────────────────────
